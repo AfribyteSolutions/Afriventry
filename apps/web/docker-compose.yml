@@ -1,0 +1,79 @@
+version: '3.9'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0-alpine
+    container_name: afriventry-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-afriventry}
+      MYSQL_USER: ${MYSQL_USER:-afriventry}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-afriventry}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - afriventry-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: afriventry-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - afriventry-network
+
+  # Afriventry Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: afriventry-app
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: mysql://${MYSQL_USER:-afriventry}:${MYSQL_PASSWORD:-afriventry}@mysql:3306/${MYSQL_DATABASE:-afriventry}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      VITE_APP_ID: ${VITE_APP_ID}
+      OAUTH_SERVER_URL: ${OAUTH_SERVER_URL}
+      VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL}
+      BUILT_IN_FORGE_API_URL: ${BUILT_IN_FORGE_API_URL}
+      BUILT_IN_FORGE_API_KEY: ${BUILT_IN_FORGE_API_KEY}
+      VITE_FRONTEND_FORGE_API_URL: ${VITE_FRONTEND_FORGE_API_URL}
+      VITE_FRONTEND_FORGE_API_KEY: ${VITE_FRONTEND_FORGE_API_KEY}
+    ports:
+      - "3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - afriventry-network
+    command: pnpm dev
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  afriventry-network:
+    driver: bridge
